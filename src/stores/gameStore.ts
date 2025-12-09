@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { QUESTIONS_BY_CATEGORY } from '@/constants/questions';
+import { selectRandomItems } from '@/lib/arrayUtils';
 
 export type GameStage = 'intro' | 'permission' | 'calibration' | 'category' | 'questions' | 'results';
 
@@ -71,7 +72,11 @@ interface GameState {
 
 const getQuestionsForCategory = (category: QuestionCategory): QuestionData[] => {
   const categoryQuestions = QUESTIONS_BY_CATEGORY[category];
-  return categoryQuestions.map(q => ({
+  
+  // Randomly select 5 questions from the pool
+  const selectedQuestions = selectRandomItems(categoryQuestions, 5);
+  
+  return selectedQuestions.map(q => ({
     ...q,
     answer: null,
     responseTime: 0,

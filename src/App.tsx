@@ -11,6 +11,8 @@ import Questions from "./pages/Questions";
 import Results from "./pages/Results";
 import NotFound from "./pages/NotFound";
 
+import { ProtectedRoute } from "./components/ProtectedRoute";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -22,10 +24,38 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Intro />} />
           <Route path="/permission" element={<Permission />} />
-          <Route path="/calibration" element={<Calibration />} />
-          <Route path="/category" element={<Category />} />
-          <Route path="/questions" element={<Questions />} />
-          <Route path="/results" element={<Results />} />
+          <Route
+            path="/calibration"
+            element={
+              <ProtectedRoute>
+                <Calibration />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/category"
+            element={
+              <ProtectedRoute>
+                <Category />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/questions"
+            element={
+              <ProtectedRoute>
+                <Questions />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/results"
+            element={
+              <ProtectedRoute>
+                <Results />
+              </ProtectedRoute>
+            }
+          />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

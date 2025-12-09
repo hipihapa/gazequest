@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { QUESTIONS_BY_CATEGORY } from '@/constants/questions';
 
 export type GameStage = 'intro' | 'permission' | 'calibration' | 'category' | 'questions' | 'results';
 
@@ -68,54 +69,8 @@ interface GameState {
   resetGame: () => void;
 }
 
-// Question sets by category
-const questionsByCategory: Record<QuestionCategory, Pick<QuestionData, 'id' | 'text'>[]> = {
-  food: [
-    { id: 1, text: "Do you like pineapple on pizza?" },
-    { id: 2, text: "Would you eat Jollof rice every day?" },
-    { id: 3, text: "Have you ever lied about liking someone's cooking?" },
-    { id: 4, text: "Do you secretly hate a popular food everyone loves?" },
-    { id: 5, text: "Have you ever pretended to be full to avoid eating?" },
-  ],
-  sex: [
-    { id: 1, text: "Have you ever lied to your partner?" },
-    { id: 2, text: "Do you believe in love at first sight?" },
-    { id: 3, text: "Have you ever faked being interested in someone?" },
-    { id: 4, text: "Would you date someone your friend dated?" },
-    { id: 5, text: "Have you ever cheated in a relationship?" },
-  ],
-  movie: [
-    { id: 1, text: "Do you pretend to have watched popular movies?" },
-    { id: 2, text: "Have you ever cried during a movie?" },
-    { id: 3, text: "Do you enjoy horror movies?" },
-    { id: 4, text: "Have you ever walked out of a cinema?" },
-    { id: 5, text: "Do you think you could act in a movie?" },
-  ],
-  music: [
-    { id: 1, text: "Do you sing in the shower?" },
-    { id: 2, text: "Have you ever pretended to know a popular song?" },
-    { id: 3, text: "Do you listen to music everyone makes fun of?" },
-    { id: 4, text: "Have you been to a concert before?" },
-    { id: 5, text: "Can you play a musical instrument?" },
-  ],
-  sports: [
-    { id: 1, text: "Do you actually enjoy watching sports?" },
-    { id: 2, text: "Have you ever lied about your fitness level?" },
-    { id: 3, text: "Do you pretend to understand sports rules?" },
-    { id: 4, text: "Have you ever faked an injury to avoid exercise?" },
-    { id: 5, text: "Would you rather watch sports than play them?" },
-  ],
-  personal: [
-    { id: 1, text: "Have you ever lied about finishing homework?" },
-    { id: 2, text: "Have you ever pretended to be sick to skip work?" },
-    { id: 3, text: "Do you think you're a good liar?" },
-    { id: 4, text: "Have you ever stolen something?" },
-    { id: 5, text: "Do you keep secrets from your best friend?" },
-  ],
-};
-
 const getQuestionsForCategory = (category: QuestionCategory): QuestionData[] => {
-  const categoryQuestions = questionsByCategory[category];
+  const categoryQuestions = QUESTIONS_BY_CATEGORY[category];
   return categoryQuestions.map(q => ({
     ...q,
     answer: null,

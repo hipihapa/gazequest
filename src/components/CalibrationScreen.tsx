@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore, CalibrationDirection } from '@/stores/gameStore';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, UserCircle2, AlertTriangle } from 'lucide-react';
 import { useCamera } from '@/hooks/useCamera';
 import { useMediaPipeFaceMesh } from '@/hooks/useMediaPipeFaceMesh';
 
@@ -20,6 +20,8 @@ export const CalibrationScreen = () => {
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [countdown, setCountdown] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
+  const [faceDetected, setFaceDetected] = useState(false);
+  const [showFaceWarning, setShowFaceWarning] = useState(false);
   const navigate = useNavigate();
   const { setCalibrationData } = useGameStore();
 
@@ -29,11 +31,24 @@ export const CalibrationScreen = () => {
     enabled: currentStepIndex >= 0,
   });
 
+  // Monitor face detection status
+  useEffect(() => {
+    const hasFace = trackingData.leftIris !== null && trackingData.rightIris !== null;
+    setFaceDetected(hasFace);
+    
+    // Show warning if face is lost during calibration
+    if (currentStepIndex >= 0 && !hasFace) {
+      setShowFaceWarning(true);
+    } else {
+      setShowFaceWarning(false);
+    }
+  }, [trackingData, currentStepIndex]);
+
   const startCalibration = useCallback(() => {
     setCurrentStepIndex(0);
   }, []);
 
-  // Handle calibration steps
+  // Handle calibration steps - ONLY proceed when face is detected
   useEffect(() => {
     if (currentStepIndex < 0 || currentStepIndex >= CALIBRATION_STEPS.length) return;
 
@@ -42,10 +57,15 @@ export const CalibrationScreen = () => {
 
     const countdownInterval = setInterval(() => {
       setCountdown(prev => {
+        // ONLY countdown if face is detected
+        if (!faceDetected) {
+          return 3; // Reset to 3 if face not visible
+        }
+        
         if (prev <= 1) {
           clearInterval(countdownInterval);
           
-          // Capture REAL iris position from MediaPipe
+          // Capture REAL iris position from MediaPipe - REQUIRED
           if (trackingData.leftIris && trackingData.rightIris) {
             const avgX = ((trackingData.leftIris.x + trackingData.rightIris.x) / 2) * 100;
             const avgY = ((trackingData.leftIris.y + trackingData.rightIris.y) / 2) * 100;
@@ -54,23 +74,20 @@ export const CalibrationScreen = () => {
               x: avgX,
               y: avgY,
             });
-          } else {
-            // Fallback if face not detected
-            console.warn('Face not detected during calibration, using fallback');
-            setCalibrationData(step.direction, {
-              x: 50,
-              y: 50,
-            });
-          }
 
-          // Move to next step or complete
-          setTimeout(() => {
-            if (currentStepIndex < CALIBRATION_STEPS.length - 1) {
-              setCurrentStepIndex(prev => prev + 1);
-            } else {
-              setIsComplete(true);
-            }
-          }, 300);
+            // Move to next step or complete
+            setTimeout(() => {
+              if (currentStepIndex < CALIBRATION_STEPS.length - 1) {
+                setCurrentStepIndex(prev => prev + 1);
+              } else {
+                setIsComplete(true);
+              }
+            }, 300);
+          } else {
+            // Should not happen since we check faceDetected, but safety fallback
+            console.error('Face lost at capture moment, retrying...');
+            return 3; // Reset countdown to retry
+          }
 
           return 0;
         }
@@ -79,7 +96,7 @@ export const CalibrationScreen = () => {
     }, 1000);
 
     return () => clearInterval(countdownInterval);
-  }, [currentStepIndex, setCalibrationData]);
+  }, [currentStepIndex, faceDetected, trackingData, setCalibrationData]);
 
   const currentStep = currentStepIndex >= 0 ? CALIBRATION_STEPS[currentStepIndex] : null;
 
@@ -123,6 +140,53 @@ export const CalibrationScreen = () => {
 
           {/* Overlay */}
           <div className="absolute inset-0 bg-gradient-to-t from-background/50 to-transparent" />
+
+          {/* Face Detection Status Indicator */}
+          <div className="absolute top-4 right-4 flex items-center gap-2 px-3 py-2 rounded-full backdrop-blur-sm border-2 transition-all duration-300" 
+            style={{
+              backgroundColor: faceDetected ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+              borderColor: faceDetected ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)'
+            }}>
+            {faceDetected ? (
+              <>
+                <UserCircle2 className="w-5 h-5 text-success" />
+                <span className="text-xs font-semibold text-success">Face Detected</span>
+              </>
+            ) : (
+              <>
+                <AlertTriangle className="w-5 h-5 text-destructive animate-pulse" />
+                <span className="text-xs font-semibold text-destructive">No Face Detected</span>
+              </>
+            )}
+          </div>
+
+          {/* Face Warning Overlay */}
+          <AnimatePresence>
+            {showFaceWarning && (
+              <motion.div
+                className="absolute inset-0 flex items-center justify-center bg-background/90 backdrop-blur-sm"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <div className="text-center px-8">
+                  <motion.div
+                    animate={{ scale: [1, 1.1, 1] }}
+                    transition={{ duration: 1, repeat: Infinity }}
+                  >
+                    <AlertTriangle className="w-16 h-16 text-destructive mx-auto mb-4" />
+                  </motion.div>
+                  <h3 className="text-xl font-bold mb-2 text-destructive">Face Not Detected</h3>
+                  <p className="text-muted-foreground mb-2">
+                    Please position your face in the camera view
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Make sure you have good lighting and your face is visible
+                  </p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Calibration dots */}
           <AnimatePresence mode="wait">

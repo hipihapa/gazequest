@@ -8,11 +8,13 @@ import { Eye, Mic, MicOff } from 'lucide-react';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useToast } from '@/hooks/use-toast';
 import { useCamera } from '@/hooks/useCamera';
+import { useMediaPipeFaceMesh, EyeTrackingData } from '@/hooks/useMediaPipeFaceMesh';
 
 export const QuestionScreen = () => {
   const { videoRef } = useCamera();
   const questionStartTime = useRef<number>(0);
-  const trackingInterval = useRef<number | null>(null);
+  const previousGazePosition = useRef<{ x: number; y: number } | null>(null);
+  const gazeStabilityHistory = useRef<number[]>([]);
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -29,20 +31,59 @@ export const QuestionScreen = () => {
   const [localLookAways, setLocalLookAways] = useState(0);
   const [gazeStability, setGazeStability] = useState(100);
   const [voiceTranscript, setVoiceTranscript] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(true); // Default muted
+  const [isSpacebarPressed, setIsSpacebarPressed] = useState(false);
 
   const currentQuestion = questions[currentQuestionIndex];
   const progress = ((currentQuestionIndex) / questions.length) * 100;
 
-  const handleAnswer = useCallback((answer: string) => {
-    const responseTime = Date.now() - questionStartTime.current;
-    
-    // Stop tracking
-    if (trackingInterval.current) {
-      clearInterval(trackingInterval.current);
+  // Process eye tracking data
+  const handleEyeTrackingData = useCallback((data: EyeTrackingData) => {
+    // Track blinks
+    if (data.isBlinking) {
+      setLocalBlinkCount(prev => prev + 1);
     }
 
+    // Track look aways
+    if (data.isLookingAway) {
+      setLocalLookAways(prev => prev + 1);
+    }
+
+    // Calculate gaze stability based on movement
+    if (data.gazeDirection && previousGazePosition.current) {
+      const movement = Math.hypot(
+        data.gazeDirection.x - previousGazePosition.current.x,
+        data.gazeDirection.y - previousGazePosition.current.y
+      );
+      
+      gazeStabilityHistory.current.push(movement);
+      if (gazeStabilityHistory.current.length > 10) {
+        gazeStabilityHistory.current.shift();
+      }
+      
+      // Calculate stability score (lower movement = higher stability)
+      const avgMovement = gazeStabilityHistory.current.reduce((a, b) => a + b, 0) / gazeStabilityHistory.current.length;
+      const stabilityScore = Math.max(0, Math.min(100, 100 - (avgMovement * 200)));
+      setGazeStability(Math.round(stabilityScore));
+    }
+    
+    if (data.gazeDirection) {
+      previousGazePosition.current = data.gazeDirection;
+    }
+  }, []);
+
+  // Initialize MediaPipe FaceMesh
+  useMediaPipeFaceMesh({
+    videoElement: videoRef.current,
+    enabled: showingQuestion,
+    onResults: handleEyeTrackingData,
+  });
+
+  const handleAnswer = useCallback((answer: string) => {
+    const responseTime = Date.now() - questionStartTime.current;
+
     // Calculate metrics for this question
-    const headMovement = Math.random() * 40; // Simulated
+    const headMovement = localLookAways * 5; // Simple estimation
     const blinkRate = localBlinkCount * (60000 / responseTime); // Blinks per minute
 
     // Update question data
@@ -116,7 +157,75 @@ export const QuestionScreen = () => {
     },
   });
 
-  // Simulate tracking behavior for each question
+  // Spacebar push-to-talk functionality
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if spacebar already pressed or if target is an input/textarea
+      if (e.code === 'Space' && !isSpacebarPressed) {
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'BUTTON') {
+          return;
+        }
+        
+        e.preventDefault();
+        setIsSpacebarPressed(true);
+        
+        // Start listening when spacebar is pressed (regardless of mute state)
+        if (!isListening) {
+          startListening();
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && isSpacebarPressed) {
+        e.preventDefault();
+        setIsSpacebarPressed(false);
+        
+        // Stop listening when spacebar is released
+        if (isListening) {
+          stopListening();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [isSpacebarPressed, isListening, startListening, stopListening]);
+
+  // Handle microphone button click (toggle persistent mute)
+  const handleMicToggle = useCallback(() => {
+    if (isMuted) {
+      // Unmute and start listening
+      setIsMuted(false);
+      if (!isListening) {
+        startListening();
+      }
+    } else {
+      // Mute and stop listening
+      setIsMuted(true);
+      if (isListening) {
+        stopListening();
+      }
+    }
+  }, [isMuted, isListening, startListening, stopListening]);
+
+  // Auto-stop listening when unmuted via toggle and speech ends
+  useEffect(() => {
+    // If not muted via toggle and not listening anymore, don't restart automatically
+    // Only spacebar should trigger temporary listening
+    if (!isMuted && !isListening && !isSpacebarPressed) {
+      // User finished speaking, keep unmuted but not actively listening
+      // They can click the button or press spacebar again
+    }
+  }, [isMuted, isListening, isSpacebarPressed]);
+
+  // Reset tracking data for each question and ensure muted state
   useEffect(() => {
     questionStartTime.current = Date.now();
     setLocalBlinkCount(0);
@@ -124,24 +233,15 @@ export const QuestionScreen = () => {
     setGazeStability(100);
     setShowingQuestion(true);
     setVoiceTranscript(null);
-
-    // Simulate eye tracking behavior
-    trackingInterval.current = window.setInterval(() => {
-      // Simulate random behavior detection
-      if (Math.random() > 0.85) {
-        setLocalBlinkCount(prev => prev + 1);
-      }
-      if (Math.random() > 0.9) {
-        setLocalLookAways(prev => prev + 1);
-        setGazeStability(prev => Math.max(50, prev - 5));
-      }
-    }, 500);
-
-    return () => {
-      if (trackingInterval.current) {
-        clearInterval(trackingInterval.current);
-      }
-    };
+    setIsMuted(true); // Always start muted
+    setIsSpacebarPressed(false);
+    previousGazePosition.current = null;
+    gazeStabilityHistory.current = [];
+    
+    // Stop any active listening when moving to new question
+    if (isListening) {
+      stopListening();
+    }
   }, [currentQuestionIndex]);
 
   return (
@@ -222,10 +322,12 @@ export const QuestionScreen = () => {
                 {isSupported && (
                   <div className="mb-6">
                     <motion.button
-                      onClick={isListening ? stopListening : startListening}
+                      onClick={handleMicToggle}
                       className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 mx-auto ${
                         isListening 
-                          ? 'bg-suspicious/20 border-2 border-suspicious glow-suspicious' 
+                          ? 'bg-success/20 border-2 border-success glow-success' 
+                          : isMuted
+                          ? 'bg-muted/20 border-2 border-muted/50 hover:border-muted'
                           : 'bg-primary/20 border-2 border-primary/50 hover:border-primary glow-primary'
                       }`}
                       whileHover={{ scale: 1.05 }}
@@ -234,19 +336,35 @@ export const QuestionScreen = () => {
                       {isListening ? (
                         <>
                           <motion.div
-                            className="absolute inset-0 rounded-full bg-suspicious/30"
+                            className="absolute inset-0 rounded-full bg-success/30"
                             animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
                             transition={{ duration: 1.5, repeat: Infinity }}
                           />
-                          <MicOff className="w-8 h-8 text-suspicious" />
+                          <Mic className="w-8 h-8 text-success" />
                         </>
+                      ) : isMuted ? (
+                        <MicOff className="w-8 h-8 text-muted-foreground" />
                       ) : (
                         <Mic className="w-8 h-8 text-primary" />
                       )}
                     </motion.button>
                     <p className="text-sm text-muted-foreground mt-3">
-                      {isListening ? 'Listening... say Yes or No' : 'Tap to speak your answer'}
+                      {isListening 
+                        ? 'Listening... say Yes or No' 
+                        : isMuted 
+                        ? 'Click to unmute or hold SPACE to talk'
+                        : 'Click to start listening'
+                      }
                     </p>
+                    {isSpacebarPressed && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-2 text-xs text-success font-medium"
+                      >
+                        🎤 Spacebar held - Recording...
+                      </motion.div>
+                    )}
                   </div>
                 )}
 

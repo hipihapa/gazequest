@@ -5,6 +5,7 @@ import { useGameStore, CalibrationDirection } from '@/stores/gameStore';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2 } from 'lucide-react';
 import { useCamera } from '@/hooks/useCamera';
+import { useMediaPipeFaceMesh } from '@/hooks/useMediaPipeFaceMesh';
 
 const CALIBRATION_STEPS: { direction: CalibrationDirection; label: string; position: string }[] = [
   { direction: 'center', label: 'Look at the center', position: 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2' },
@@ -22,6 +23,12 @@ export const CalibrationScreen = () => {
   const navigate = useNavigate();
   const { setCalibrationData } = useGameStore();
 
+  // Initialize MediaPipe FaceMesh for eye tracking
+  const { trackingData } = useMediaPipeFaceMesh({
+    videoElement: videoRef.current,
+    enabled: currentStepIndex >= 0,
+  });
+
   const startCalibration = useCallback(() => {
     setCurrentStepIndex(0);
   }, []);
@@ -38,12 +45,23 @@ export const CalibrationScreen = () => {
         if (prev <= 1) {
           clearInterval(countdownInterval);
           
-          // Simulate capturing calibration data
-          // In a real implementation, we'd get actual iris position from MediaPipe
-          setCalibrationData(step.direction, {
-            x: Math.random() * 100,
-            y: Math.random() * 100,
-          });
+          // Capture REAL iris position from MediaPipe
+          if (trackingData.leftIris && trackingData.rightIris) {
+            const avgX = ((trackingData.leftIris.x + trackingData.rightIris.x) / 2) * 100;
+            const avgY = ((trackingData.leftIris.y + trackingData.rightIris.y) / 2) * 100;
+            
+            setCalibrationData(step.direction, {
+              x: avgX,
+              y: avgY,
+            });
+          } else {
+            // Fallback if face not detected
+            console.warn('Face not detected during calibration, using fallback');
+            setCalibrationData(step.direction, {
+              x: 50,
+              y: 50,
+            });
+          }
 
           // Move to next step or complete
           setTimeout(() => {

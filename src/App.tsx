@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Intro from "./pages/Intro";
 import Permission from "./pages/Permission";
 import Calibration from "./pages/Calibration";
+import Category from "./pages/Category";
 import Questions from "./pages/Questions";
 import Results from "./pages/Results";
 import NotFound from "./pages/NotFound";
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/" element={<Intro />} />
           <Route path="/permission" element={<Permission />} />
           <Route path="/calibration" element={<Calibration />} />
+          <Route path="/category" element={<Category />} />
           <Route path="/questions" element={<Questions />} />
           <Route path="/results" element={<Results />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

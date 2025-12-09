@@ -261,8 +261,8 @@ export const CalibrationScreen = () => {
               Start Calibration
             </Button>
           ) : isComplete ? (
-            <Button variant="success" size="lg" onClick={() => navigate('/questions')}>
-              Begin Game
+            <Button variant="success" size="lg" onClick={() => navigate('/category')}>
+              Choose Category
             </Button>
           ) : (
             <p className="text-sm text-muted-foreground">

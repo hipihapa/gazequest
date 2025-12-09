@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '@/stores/gameStore';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -12,13 +13,13 @@ export const QuestionScreen = () => {
   const questionStartTime = useRef<number>(0);
   const trackingInterval = useRef<number | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
   
   const { 
     questions, 
     currentQuestionIndex, 
     updateQuestionData,
     nextQuestion,
-    setStage,
     calculateResults 
   } = useGameStore();
 
@@ -62,7 +63,7 @@ export const QuestionScreen = () => {
         nextQuestion();
       } else {
         calculateResults();
-        setStage('results');
+        navigate('/results');
       }
     }, 500);
   }, [
@@ -74,7 +75,7 @@ export const QuestionScreen = () => {
     updateQuestionData,
     nextQuestion,
     calculateResults,
-    setStage
+    navigate
   ]);
 
   // Process voice input

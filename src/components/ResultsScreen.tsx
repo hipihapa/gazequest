@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '@/stores/gameStore';
 import { Button } from '@/components/ui/button';
 import { Eye, AlertTriangle, CheckCircle2, HelpCircle, RotateCcw, Share2 } from 'lucide-react';
@@ -37,7 +38,13 @@ const MetricBar = ({ label, value, maxValue = 100, color }: {
 };
 
 export const ResultsScreen = () => {
+  const navigate = useNavigate();
   const { behaviorMetrics, resetGame } = useGameStore();
+
+  const handlePlayAgain = () => {
+    resetGame();
+    navigate('/');
+  };
 
   if (!behaviorMetrics) return null;
 
@@ -184,7 +191,7 @@ export const ResultsScreen = () => {
           <Button 
             variant="hero" 
             size="lg"
-            onClick={resetGame}
+            onClick={handlePlayAgain}
             className="flex-1"
           >
             <RotateCcw className="w-5 h-5 mr-2" />
@@ -197,8 +204,8 @@ export const ResultsScreen = () => {
             onClick={() => {
               if (navigator.share) {
                 navigator.share({
-                  title: 'EyeDetect Results',
-                  text: `I scored ${Math.round(confidenceScore)}% on EyeDetect! Can your eyes keep a secret?`,
+                  title: 'GazeQuest Results',
+                  text: `I scored ${Math.round(confidenceScore)}% on GazeQuest! Can your eyes keep a secret?`,
                 });
               }
             }}

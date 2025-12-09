@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useGameStore, CalibrationDirection } from '@/stores/gameStore';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2 } from 'lucide-react';
@@ -17,7 +18,8 @@ export const CalibrationScreen = () => {
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [countdown, setCountdown] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
-  const { setCalibrationData, setStage } = useGameStore();
+  const navigate = useNavigate();
+  const { setCalibrationData } = useGameStore();
 
   // Start camera
   useEffect(() => {
@@ -200,7 +202,7 @@ export const CalibrationScreen = () => {
               Start Calibration
             </Button>
           ) : isComplete ? (
-            <Button variant="success" size="lg" onClick={() => setStage('questions')}>
+            <Button variant="success" size="lg" onClick={() => navigate('/questions')}>
               Begin Game
             </Button>
           ) : (

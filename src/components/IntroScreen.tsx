@@ -1,10 +1,10 @@
 import { motion } from 'framer-motion';
 import { Eye, Shield, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useGameStore } from '@/stores/gameStore';
+import { useNavigate } from 'react-router-dom';
 
 export const IntroScreen = () => {
-  const setStage = useGameStore((state) => state.setStage);
+  const navigate = useNavigate();
 
   return (
     <motion.div 
@@ -42,7 +42,7 @@ export const IntroScreen = () => {
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.4 }}
       >
-        EYE<span className="text-primary">DETECT</span>
+        GAZE<span className="text-primary">QUEST</span>
       </motion.h1>
 
       <motion.p
@@ -81,7 +81,7 @@ export const IntroScreen = () => {
         <Button 
           variant="hero" 
           size="xl"
-          onClick={() => setStage('permission')}
+          onClick={() => navigate('/permission')}
         >
           Start Game
         </Button>

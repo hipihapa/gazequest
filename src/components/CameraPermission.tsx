@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Camera, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '@/stores/gameStore';
 
 export const CameraPermission = () => {
   const [isRequesting, setIsRequesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { setCameraPermission, setStage } = useGameStore();
+  const navigate = useNavigate();
+  const { setCameraPermission } = useGameStore();
 
   const requestPermission = async () => {
     setIsRequesting(true);
@@ -26,7 +28,7 @@ export const CameraPermission = () => {
       stream.getTracks().forEach(track => track.stop());
       
       setCameraPermission(true);
-      setStage('calibration');
+      navigate('/calibration');
     } catch (err) {
       console.error('Camera permission denied:', err);
       setError('Camera access is required to play. Please allow camera access and try again.');

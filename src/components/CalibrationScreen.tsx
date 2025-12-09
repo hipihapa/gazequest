@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore, CalibrationDirection } from '@/stores/gameStore';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2 } from 'lucide-react';
+import { useCamera } from '@/hooks/useCamera';
 
 const CALIBRATION_STEPS: { direction: CalibrationDirection; label: string; position: string }[] = [
   { direction: 'center', label: 'Look at the center', position: 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2' },
@@ -14,36 +15,12 @@ const CALIBRATION_STEPS: { direction: CalibrationDirection; label: string; posit
 ];
 
 export const CalibrationScreen = () => {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const { videoRef } = useCamera();
   const [currentStepIndex, setCurrentStepIndex] = useState(-1);
   const [countdown, setCountdown] = useState(0);
   const [isComplete, setIsComplete] = useState(false);
   const navigate = useNavigate();
   const { setCalibrationData } = useGameStore();
-
-  // Start camera
-  useEffect(() => {
-    const startCamera = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: 640, height: 480 }
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (err) {
-        console.error('Failed to start camera:', err);
-      }
-    };
-    startCamera();
-
-    return () => {
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, []);
 
   const startCalibration = useCallback(() => {
     setCurrentStepIndex(0);

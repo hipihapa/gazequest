@@ -7,9 +7,10 @@ import { Progress } from '@/components/ui/progress';
 import { Eye, Mic, MicOff } from 'lucide-react';
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useToast } from '@/hooks/use-toast';
+import { useCamera } from '@/hooks/useCamera';
 
 export const QuestionScreen = () => {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const { videoRef } = useCamera();
   const questionStartTime = useRef<number>(0);
   const trackingInterval = useRef<number | null>(null);
   const { toast } = useToast();
@@ -114,30 +115,6 @@ export const QuestionScreen = () => {
       });
     },
   });
-
-  // Start camera
-  useEffect(() => {
-    const startCamera = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: 320, height: 240 }
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (err) {
-        console.error('Failed to start camera:', err);
-      }
-    };
-    startCamera();
-
-    return () => {
-      if (videoRef.current?.srcObject) {
-        const stream = videoRef.current.srcObject as MediaStream;
-        stream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, []);
 
   // Simulate tracking behavior for each question
   useEffect(() => {

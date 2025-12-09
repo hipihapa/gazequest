@@ -82,6 +82,30 @@
     font-family: 'Inter', sans-serif;
     background: var(--gradient-radial);
     min-height: 100vh;
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(
+      ellipse at center,
+      hsl(187 100% 50% / 0.05) 0%,
+      transparent 50%,
+      hsl(187 100% 50% / 0.03) 100%
+    );
+    animation: heartbeat 2s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body > * {
+    position: relative;
+    z-index: 1;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -184,5 +208,28 @@
 
   .animate-grid-pulse {
     animation: grid-pulse 4s ease-in-out infinite;
+  }
+
+  @keyframes heartbeat {
+    0%, 100% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
+    10% {
+      opacity: 0.8;
+      transform: scale(1.05);
+    }
+    20% {
+      opacity: 0.4;
+      transform: scale(1);
+    }
+    30% {
+      opacity: 0.9;
+      transform: scale(1.08);
+    }
+    40%, 60% {
+      opacity: 0.3;
+      transform: scale(1);
+    }
   }
 }

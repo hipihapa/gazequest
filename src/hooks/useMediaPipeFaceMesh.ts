@@ -23,6 +23,8 @@ export interface EyeTrackingData {
   gazeDirection: { x: number; y: number } | null; // Normalized -1 to 1
   facePosition: { x: number; y: number; z: number } | null;
   isLookingAway: boolean;
+  trackingQuality: 'excellent' | 'good' | 'fair' | 'poor';
+  confidenceScore: number; // 0-100
 }
 
 export interface UseMediaPipeFaceMeshProps {
@@ -46,6 +48,8 @@ export const useMediaPipeFaceMesh = ({
     gazeDirection: null,
     facePosition: null,
     isLookingAway: false,
+    trackingQuality: 'poor',
+    confidenceScore: 0,
   });
   const previousEyeAspectRatio = useRef<number>(0);
 
@@ -82,6 +86,8 @@ export const useMediaPipeFaceMesh = ({
         gazeDirection: null,
         facePosition: null,
         isLookingAway: true,
+        trackingQuality: 'poor',
+        confidenceScore: 0,
       });
       return;
     }
@@ -122,6 +128,22 @@ export const useMediaPipeFaceMesh = ({
     // Detect if looking away (face turned significantly)
     const isLookingAway = Math.abs(gazeX) > 0.7 || Math.abs(gazeY) > 0.7;
 
+    // Calculate tracking quality based on landmark stability and detection
+    // Higher z-variance indicates less stable tracking
+    const landmarkVariance = leftIrisLandmarks.reduce((acc, landmark) => {
+      return acc + Math.abs(landmark.z || 0);
+    }, 0) / leftIrisLandmarks.length;
+    
+    // Normalize confidence (lower variance = higher confidence)
+    const confidenceScore = Math.max(0, Math.min(100, 100 - (landmarkVariance * 1000)));
+    
+    // Determine tracking quality
+    let trackingQuality: 'excellent' | 'good' | 'fair' | 'poor';
+    if (confidenceScore >= 80) trackingQuality = 'excellent';
+    else if (confidenceScore >= 60) trackingQuality = 'good';
+    else if (confidenceScore >= 40) trackingQuality = 'fair';
+    else trackingQuality = 'poor';
+
     const data: EyeTrackingData = {
       leftIris: { x: leftIris.x, y: leftIris.y },
       rightIris: { x: rightIris.x, y: rightIris.y },
@@ -129,6 +151,8 @@ export const useMediaPipeFaceMesh = ({
       gazeDirection: { x: gazeX, y: gazeY },
       facePosition,
       isLookingAway,
+      trackingQuality,
+      confidenceScore: Math.round(confidenceScore),
     };
 
     setTrackingData(data);

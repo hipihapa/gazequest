@@ -23,6 +23,9 @@ export interface QuestionData {
   blinkRate: number;
   headMovement: number;
   lookAwayCount: number;
+  verdict: 'truthful' | 'suspicious' | null;
+  verdictConfidence: number;
+  trackingQuality: 'excellent' | 'good' | 'fair' | 'poor' | null;
 }
 
 export interface BehaviorMetrics {
@@ -66,7 +69,7 @@ interface GameState {
 }
 
 // Question sets by category
-const questionsByCategory: Record<QuestionCategory, Omit<QuestionData, 'answer' | 'responseTime' | 'gazeStability' | 'blinkRate' | 'headMovement' | 'lookAwayCount'>[]> = {
+const questionsByCategory: Record<QuestionCategory, Pick<QuestionData, 'id' | 'text'>[]> = {
   food: [
     { id: 1, text: "Do you like pineapple on pizza?" },
     { id: 2, text: "Would you eat Jollof rice every day?" },
@@ -121,6 +124,9 @@ const getQuestionsForCategory = (category: QuestionCategory): QuestionData[] => 
     blinkRate: 0,
     headMovement: 0,
     lookAwayCount: 0,
+    verdict: null,
+    verdictConfidence: 0,
+    trackingQuality: null,
   }));
 };
 

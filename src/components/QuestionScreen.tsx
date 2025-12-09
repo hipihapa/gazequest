@@ -9,6 +9,7 @@ import { useSpeechRecognition } from '@/hooks/useSpeechRecognition';
 import { useToast } from '@/hooks/use-toast';
 import { useCamera } from '@/hooks/useCamera';
 import { useMediaPipeFaceMesh, EyeTrackingData } from '@/hooks/useMediaPipeFaceMesh';
+import { FeedbackCard } from '@/components/FeedbackCard';
 
 export const QuestionScreen = () => {
   const { videoRef } = useCamera();
@@ -33,12 +34,19 @@ export const QuestionScreen = () => {
   const [voiceTranscript, setVoiceTranscript] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(true); // Default muted
   const [isSpacebarPressed, setIsSpacebarPressed] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackVerdict, setFeedbackVerdict] = useState<'truthful' | 'suspicious'>('truthful');
+  const [feedbackConfidence, setFeedbackConfidence] = useState(0);
+  const [trackingQualityData, setTrackingQualityData] = useState<'excellent' | 'good' | 'fair' | 'poor'>('good');
 
   const currentQuestion = questions[currentQuestionIndex];
   const progress = ((currentQuestionIndex) / questions.length) * 100;
 
   // Process eye tracking data
   const handleEyeTrackingData = useCallback((data: EyeTrackingData) => {
+    // Update tracking quality
+    setTrackingQualityData(data.trackingQuality);
+    
     // Track blinks
     if (data.isBlinking) {
       setLocalBlinkCount(prev => prev + 1);
@@ -86,6 +94,33 @@ export const QuestionScreen = () => {
     const headMovement = localLookAways * 5; // Simple estimation
     const blinkRate = localBlinkCount * (60000 / responseTime); // Blinks per minute
 
+    // Calculate lie detection verdict for this question
+    let suspicionScore = 0;
+    
+    // Gaze stability (lower stability = more suspicious)
+    if (gazeStability < 60) suspicionScore += 3;
+    else if (gazeStability < 80) suspicionScore += 1;
+    
+    // Blink rate (higher = more nervous)
+    if (blinkRate > 20) suspicionScore += 2;
+    else if (blinkRate > 10) suspicionScore += 1;
+    
+    // Head movement (higher = more avoidance)
+    if (headMovement > 30) suspicionScore += 2;
+    else if (headMovement > 15) suspicionScore += 1;
+    
+    // Response time (slower = less confident)
+    if (responseTime > 5000) suspicionScore += 2;
+    else if (responseTime > 3000) suspicionScore += 1;
+    
+    // Look aways
+    if (localLookAways > 2) suspicionScore += 2;
+    else if (localLookAways > 1) suspicionScore += 1;
+    
+    // Convert to confidence score (0-100, higher confidence = more truthful)
+    const verdictConfidence = Math.max(0, Math.min(100, 100 - (suspicionScore * 10)));
+    const verdict: 'truthful' | 'suspicious' = verdictConfidence >= 50 ? 'truthful' : 'suspicious';
+
     // Update question data
     updateQuestionData(currentQuestionIndex, {
       answer,
@@ -94,11 +129,29 @@ export const QuestionScreen = () => {
       blinkRate,
       headMovement,
       lookAwayCount: localLookAways,
+      verdict,
+      verdictConfidence,
+      trackingQuality: trackingQualityData,
     });
 
-    // Show transition then move to next
+    // Show feedback card
+    setFeedbackVerdict(verdict);
+    setFeedbackConfidence(verdictConfidence);
     setShowingQuestion(false);
+    setShowFeedback(true);
     setVoiceTranscript(null);
+  }, [
+    currentQuestionIndex, 
+    localBlinkCount, 
+    localLookAways, 
+    gazeStability, 
+    trackingQualityData,
+    updateQuestionData,
+  ]);
+
+  // Handle feedback completion
+  const handleFeedbackComplete = useCallback(() => {
+    setShowFeedback(false);
     
     setTimeout(() => {
       if (currentQuestionIndex < questions.length - 1) {
@@ -107,18 +160,8 @@ export const QuestionScreen = () => {
         calculateResults();
         navigate('/results');
       }
-    }, 500);
-  }, [
-    currentQuestionIndex, 
-    localBlinkCount, 
-    localLookAways, 
-    gazeStability, 
-    questions.length,
-    updateQuestionData,
-    nextQuestion,
-    calculateResults,
-    navigate
-  ]);
+    }, 300);
+  }, [currentQuestionIndex, questions.length, nextQuestion, calculateResults, navigate]);
 
   // Process voice input
   const processVoiceInput = useCallback((transcript: string) => {
@@ -417,6 +460,17 @@ export const QuestionScreen = () => {
           </motion.div>
         </div>
       </div>
+
+      {/* Feedback Card */}
+      <AnimatePresence>
+        {showFeedback && (
+          <FeedbackCard
+            verdict={feedbackVerdict}
+            confidence={feedbackConfidence}
+            onComplete={handleFeedbackComplete}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

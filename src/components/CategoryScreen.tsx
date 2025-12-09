@@ -73,7 +73,7 @@ export const CategoryScreen = () => {
   };
 
   return (
-    <motion.div 
+    <motion.div
       className="flex flex-col min-h-screen px-6 py-12"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -81,7 +81,7 @@ export const CategoryScreen = () => {
     >
       {/* Header */}
       <motion.div
-        className="text-center mb-12"
+        className="text-center mb-4"
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.2 }}
@@ -110,7 +110,7 @@ export const CategoryScreen = () => {
             >
               {/* Gradient Background */}
               <div className={`absolute inset-0 bg-gradient-to-br ${category.bgColor} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
-              
+
               {/* Content */}
               <div className="relative z-10 flex flex-col items-center text-center">
                 {/* Icon */}

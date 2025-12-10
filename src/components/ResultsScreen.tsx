@@ -43,7 +43,7 @@ export const ResultsScreen = () => {
 
   const handlePlayAgain = () => {
     resetGame();
-    navigate('/categories');
+    navigate('/category');
   };
 
   if (!behaviorMetrics) return null;

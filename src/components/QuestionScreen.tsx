@@ -16,6 +16,7 @@ export const QuestionScreen = () => {
   const questionStartTime = useRef<number>(0);
   const previousGazePosition = useRef<{ x: number; y: number } | null>(null);
   const gazeStabilityHistory = useRef<number[]>([]);
+  const trackingFramesReceived = useRef<number>(0); // Track number of successful tracking frames
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -38,12 +39,22 @@ export const QuestionScreen = () => {
   const [feedbackVerdict, setFeedbackVerdict] = useState<'truthful' | 'suspicious'>('truthful');
   const [feedbackConfidence, setFeedbackConfidence] = useState(0);
   const [trackingQualityData, setTrackingQualityData] = useState<'excellent' | 'good' | 'fair' | 'poor'>('good');
+  const [isFaceDetected, setIsFaceDetected] = useState(false);
 
   const currentQuestion = questions[currentQuestionIndex];
   const progress = ((currentQuestionIndex) / questions.length) * 100;
 
   // Process eye tracking data
   const handleEyeTrackingData = useCallback((data: EyeTrackingData) => {
+    // Only increment tracking frames counter when actual face is detected
+    // (gazeDirection will be null if no face detected)
+    const faceDetected = data.gazeDirection !== null;
+    setIsFaceDetected(faceDetected);
+    
+    if (faceDetected) {
+      trackingFramesReceived.current += 1;
+    }
+    
     // Update tracking quality
     setTrackingQualityData(data.trackingQuality);
     
@@ -89,37 +100,110 @@ export const QuestionScreen = () => {
 
   const handleAnswer = useCallback((answer: string) => {
     const responseTime = Date.now() - questionStartTime.current;
+    
+    // VALIDATION: Check if we received sufficient tracking data
+    // Minimum 10 frames required (about 0.3 seconds at 30fps)
+    const MIN_TRACKING_FRAMES = 10;
+    const hasValidTracking = trackingFramesReceived.current >= MIN_TRACKING_FRAMES;
+    
+    console.log('📊 Tracking Validation:', {
+      framesReceived: trackingFramesReceived.current,
+      minimumRequired: MIN_TRACKING_FRAMES,
+      hasValidTracking,
+      responseTime
+    });
+    
+    // If insufficient tracking, show warning and don't proceed
+    if (!hasValidTracking) {
+      toast({
+        title: "⚠️ Eye Tracking Failed",
+        description: `Only ${trackingFramesReceived.current} tracking frames received (need ${MIN_TRACKING_FRAMES}). Camera may be covered or face not detected.`,
+        variant: "destructive",
+        duration: 5000,
+      });
+      return; // Don't process the answer
+    }
 
     // Calculate metrics for this question
     const headMovement = localLookAways * 5; // Simple estimation
     const blinkRate = localBlinkCount * (60000 / responseTime); // Blinks per minute
 
-    // Calculate lie detection verdict for this question
-    let suspicionScore = 0;
+    // Calculate lie detection verdict for this question - more nuanced scoring
+    let truthfulnessScore = 100; // Start with perfect score
     
     // Gaze stability (lower stability = more suspicious)
-    if (gazeStability < 60) suspicionScore += 3;
-    else if (gazeStability < 80) suspicionScore += 1;
+    // More gradual scoring system
+    if (gazeStability < 50) {
+      truthfulnessScore -= 25;
+    } else if (gazeStability < 65) {
+      truthfulnessScore -= 15;
+    } else if (gazeStability < 75) {
+      truthfulnessScore -= 10;
+    } else if (gazeStability < 85) {
+      truthfulnessScore -= 5;
+    }
     
-    // Blink rate (higher = more nervous)
-    if (blinkRate > 20) suspicionScore += 2;
-    else if (blinkRate > 10) suspicionScore += 1;
+    // Blink rate (higher = more nervous, but also too low can be suspicious)
+    if (blinkRate > 30) {
+      truthfulnessScore -= 20;
+    } else if (blinkRate > 20) {
+      truthfulnessScore -= 12;
+    } else if (blinkRate > 15) {
+      truthfulnessScore -= 8;
+    } else if (blinkRate < 3 && responseTime > 1000) {
+      // Too few blinks can also be suspicious (trying too hard)
+      truthfulnessScore -= 5;
+    }
     
     // Head movement (higher = more avoidance)
-    if (headMovement > 30) suspicionScore += 2;
-    else if (headMovement > 15) suspicionScore += 1;
+    if (headMovement > 25) {
+      truthfulnessScore -= 15;
+    } else if (headMovement > 15) {
+      truthfulnessScore -= 10;
+    } else if (headMovement > 8) {
+      truthfulnessScore -= 5;
+    }
     
-    // Response time (slower = less confident)
-    if (responseTime > 5000) suspicionScore += 2;
-    else if (responseTime > 3000) suspicionScore += 1;
+    // Response time (both too quick and too slow can be suspicious)
+    if (responseTime > 7000) {
+      truthfulnessScore -= 18; // Very slow = thinking/lying
+    } else if (responseTime > 5000) {
+      truthfulnessScore -= 12;
+    } else if (responseTime > 3500) {
+      truthfulnessScore -= 6;
+    } else if (responseTime < 800) {
+      truthfulnessScore -= 8; // Too quick = rehearsed
+    }
     
-    // Look aways
-    if (localLookAways > 2) suspicionScore += 2;
-    else if (localLookAways > 1) suspicionScore += 1;
+    // Look aways (direct correlation with suspicion)
+    if (localLookAways > 3) {
+      truthfulnessScore -= 20;
+    } else if (localLookAways > 2) {
+      truthfulnessScore -= 12;
+    } else if (localLookAways > 1) {
+      truthfulnessScore -= 8;
+    } else if (localLookAways > 0) {
+      truthfulnessScore -= 4;
+    }
     
-    // Convert to confidence score (0-100, higher confidence = more truthful)
-    const verdictConfidence = Math.max(0, Math.min(100, 100 - (suspicionScore * 10)));
+    // Add natural variation (±5%) to make it feel more realistic
+    const variation = Math.random() * 10 - 5;
+    truthfulnessScore += variation;
+    
+    // Clamp to 0-100 range
+    const verdictConfidence = Math.max(15, Math.min(100, Math.round(truthfulnessScore)));
     const verdict: 'truthful' | 'suspicious' = verdictConfidence >= 50 ? 'truthful' : 'suspicious';
+    
+    // Debug logging to understand the calculation
+    console.log('🎯 Confidence Calculation:', {
+      gazeStability,
+      blinkRate: Math.round(blinkRate),
+      headMovement,
+      responseTime,
+      lookAways: localLookAways,
+      finalConfidence: verdictConfidence,
+      verdict
+    });
 
     // Update question data
     updateQuestionData(currentQuestionIndex, {
@@ -147,6 +231,7 @@ export const QuestionScreen = () => {
     gazeStability, 
     trackingQualityData,
     updateQuestionData,
+    toast,
   ]);
 
   // Handle feedback completion
@@ -271,6 +356,7 @@ export const QuestionScreen = () => {
   // Reset tracking data for each question and ensure muted state
   useEffect(() => {
     questionStartTime.current = Date.now();
+    trackingFramesReceived.current = 0; // Reset tracking frames counter
     setLocalBlinkCount(0);
     setLocalLookAways(0);
     setGazeStability(100);
@@ -310,9 +396,9 @@ export const QuestionScreen = () => {
       {/* Main content */}
       <div className="flex-1 flex flex-col items-center justify-center">
         <div className="w-full max-w-2xl">
-          {/* Camera feed (small) */}
+          {/* Camera feed (larger for better tracking) */}
           <motion.div 
-            className="relative w-32 h-24 mx-auto mb-8 rounded-lg overflow-hidden border border-primary/30"
+            className="relative w-64 h-48 mx-auto mb-8 rounded-lg overflow-hidden border border-primary/30"
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
           >
@@ -323,9 +409,17 @@ export const QuestionScreen = () => {
               muted
               className="w-full h-full object-cover scale-x-[-1]"
             />
-            <div className="absolute top-1 right-1 flex items-center gap-1 px-2 py-0.5 rounded-full bg-success/20">
-              <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-              <span className="text-[10px] text-success font-medium">TRACKING</span>
+            <div className={`absolute top-1 right-1 flex items-center gap-1 px-2 py-0.5 rounded-full ${
+              isFaceDetected ? 'bg-success/20' : 'bg-destructive/20'
+            }`}>
+              <div className={`w-1.5 h-1.5 rounded-full ${
+                isFaceDetected ? 'bg-success animate-pulse' : 'bg-destructive'
+              }`} />
+              <span className={`text-[10px] font-medium ${
+                isFaceDetected ? 'text-success' : 'text-destructive'
+              }`}>
+                {isFaceDetected ? 'TRACKING' : 'NO FACE'}
+              </span>
             </div>
           </motion.div>
 

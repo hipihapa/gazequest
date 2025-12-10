@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useGameStore, CalibrationDirection } from '@/stores/gameStore';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, UserCircle2, AlertTriangle } from 'lucide-react';
 import { useCamera } from '@/hooks/useCamera';
-import { useMediaPipeFaceMesh } from '@/hooks/useMediaPipeFaceMesh';
+import { useMediaPipeFaceMesh, EyeTrackingData } from '@/hooks/useMediaPipeFaceMesh';
 
 const CALIBRATION_STEPS: { direction: CalibrationDirection; label: string; position: string }[] = [
   { direction: 'center', label: 'Look at the center', position: 'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2' },
@@ -22,19 +22,65 @@ export const CalibrationScreen = () => {
   const [isComplete, setIsComplete] = useState(false);
   const [faceDetected, setFaceDetected] = useState(false);
   const [showFaceWarning, setShowFaceWarning] = useState(false);
+  const [isLookingAtTarget, setIsLookingAtTarget] = useState(false);
+  const faceDetectedRef = useRef(false); // Use ref to avoid effect re-runs
+  const trackingDataRef = useRef<EyeTrackingData | null>(null); // Store tracking data in ref to avoid effect re-runs
+  const isLookingAtTargetRef = useRef(false); // Track if looking at correct position
   const navigate = useNavigate();
   const { setCalibrationData } = useGameStore();
 
-  // Initialize MediaPipe FaceMesh for eye tracking
+  // Initialize MediaPipe FaceMesh for eye tracking - always enabled to show face detection status
   const { trackingData } = useMediaPipeFaceMesh({
     videoElement: videoRef.current,
-    enabled: currentStepIndex >= 0,
+    enabled: true, // Always enabled so face detection works before calibration starts
   });
 
-  // Monitor face detection status
+  // Check if user is looking in the correct direction for the current step
+  const checkGazeDirection = useCallback((direction: CalibrationDirection, gazeData: { x: number; y: number } | null): boolean => {
+    if (!gazeData) return false;
+    
+    const CENTER_THRESHOLD = 0.3; // Tolerance for center
+    const SIDE_THRESHOLD = 0.25; // Lower threshold for sides (more lenient)
+    
+    // Debug logging
+    console.log(`Checking ${direction}: gazeX=${gazeData.x.toFixed(2)}, gazeY=${gazeData.y.toFixed(2)}`);
+    
+    switch (direction) {
+      case 'center':
+        // Looking at center: both x and y should be close to 0
+        return Math.abs(gazeData.x) < CENTER_THRESHOLD && Math.abs(gazeData.y) < CENTER_THRESHOLD;
+      case 'left':
+        // Looking left: x should be negative (video is mirrored, so left = positive in camera space)
+        // Using more lenient threshold
+        return gazeData.x > SIDE_THRESHOLD;
+      case 'right':
+        // Looking right: x should be positive (video is mirrored, so right = negative in camera space)
+        return gazeData.x < -SIDE_THRESHOLD;
+      case 'up':
+        // Looking up: y should be negative
+        return gazeData.y < -SIDE_THRESHOLD;
+      case 'down':
+        // Looking down: y should be positive
+        return gazeData.y > SIDE_THRESHOLD;
+      default:
+        return false;
+    }
+  }, []);
+
+  // Monitor face detection status and gaze direction
   useEffect(() => {
     const hasFace = trackingData.leftIris !== null && trackingData.rightIris !== null;
     setFaceDetected(hasFace);
+    faceDetectedRef.current = hasFace; // Keep ref updated
+    trackingDataRef.current = trackingData; // Keep tracking data ref updated
+    
+    // Check if looking at the target for current step
+    if (currentStepIndex >= 0 && currentStepIndex < CALIBRATION_STEPS.length) {
+      const currentDirection = CALIBRATION_STEPS[currentStepIndex].direction;
+      const lookingCorrectly = checkGazeDirection(currentDirection, trackingData.gazeDirection);
+      setIsLookingAtTarget(lookingCorrectly);
+      isLookingAtTargetRef.current = lookingCorrectly;
+    }
     
     // Show warning if face is lost during calibration
     if (currentStepIndex >= 0 && !hasFace) {
@@ -42,7 +88,7 @@ export const CalibrationScreen = () => {
     } else {
       setShowFaceWarning(false);
     }
-  }, [trackingData, currentStepIndex]);
+  }, [trackingData, currentStepIndex, checkGazeDirection]);
 
   const startCalibration = useCallback(() => {
     setCurrentStepIndex(0);
@@ -57,18 +103,19 @@ export const CalibrationScreen = () => {
 
     const countdownInterval = setInterval(() => {
       setCountdown(prev => {
-        // ONLY countdown if face is detected
-        if (!faceDetected) {
-          return 3; // Reset to 3 if face not visible
+        // ONLY countdown if face is detected AND looking at the target
+        if (!faceDetectedRef.current || !isLookingAtTargetRef.current) {
+          return 3; // Reset to 3 if face not visible or not looking at target
         }
         
         if (prev <= 1) {
           clearInterval(countdownInterval);
           
-          // Capture REAL iris position from MediaPipe - REQUIRED
-          if (trackingData.leftIris && trackingData.rightIris) {
-            const avgX = ((trackingData.leftIris.x + trackingData.rightIris.x) / 2) * 100;
-            const avgY = ((trackingData.leftIris.y + trackingData.rightIris.y) / 2) * 100;
+          // Capture REAL iris position from MediaPipe - REQUIRED (use ref for latest data)
+          const currentTrackingData = trackingDataRef.current;
+          if (currentTrackingData?.leftIris && currentTrackingData?.rightIris) {
+            const avgX = ((currentTrackingData.leftIris.x + currentTrackingData.rightIris.x) / 2) * 100;
+            const avgY = ((currentTrackingData.leftIris.y + currentTrackingData.rightIris.y) / 2) * 100;
             
             setCalibrationData(step.direction, {
               x: avgX,
@@ -96,7 +143,7 @@ export const CalibrationScreen = () => {
     }, 1000);
 
     return () => clearInterval(countdownInterval);
-  }, [currentStepIndex, faceDetected, trackingData, setCalibrationData]);
+  }, [currentStepIndex, setCalibrationData]);
 
   const currentStep = currentStepIndex >= 0 ? CALIBRATION_STEPS[currentStepIndex] : null;
 
@@ -206,8 +253,14 @@ export const CalibrationScreen = () => {
                     transition={{ duration: 1, repeat: Infinity }}
                     style={{ width: 48, height: 48, marginLeft: -24, marginTop: -24 }}
                   />
-                  {/* Inner dot */}
-                  <div className="w-6 h-6 rounded-full bg-primary glow-primary -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
+                  {/* Inner dot - changes color when looking correctly */}
+                  <div 
+                    className={`w-6 h-6 rounded-full -translate-x-1/2 -translate-y-1/2 flex items-center justify-center transition-all duration-300 ${
+                      isLookingAtTarget 
+                        ? 'bg-success glow-success scale-110' 
+                        : 'bg-primary glow-primary'
+                    }`}
+                  >
                     {countdown > 0 && (
                       <span className="text-xs font-bold text-primary-foreground">{countdown}</span>
                     )}

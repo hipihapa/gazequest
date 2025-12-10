@@ -17,6 +17,7 @@ export const QuestionScreen = () => {
   const previousGazePosition = useRef<{ x: number; y: number } | null>(null);
   const gazeStabilityHistory = useRef<number[]>([]);
   const trackingFramesReceived = useRef<number>(0); // Track number of successful tracking frames
+  const trackingDataRef = useRef<EyeTrackingData | null>(null); // Store tracking data in ref like CalibrationScreen
   const { toast } = useToast();
   const navigate = useNavigate();
   
@@ -44,35 +45,43 @@ export const QuestionScreen = () => {
   const currentQuestion = questions[currentQuestionIndex];
   const progress = ((currentQuestionIndex) / questions.length) * 100;
 
-  // Process eye tracking data
-  const handleEyeTrackingData = useCallback((data: EyeTrackingData) => {
-    // Only increment tracking frames counter when actual face is detected
-    // (gazeDirection will be null if no face detected)
-    const faceDetected = data.gazeDirection !== null;
-    setIsFaceDetected(faceDetected);
+  // Initialize MediaPipe FaceMesh - like CalibrationScreen, get trackingData directly
+  const { trackingData } = useMediaPipeFaceMesh({
+    videoElement: videoRef.current,
+    enabled: showingQuestion,
+  });
+
+  // Monitor tracking data changes - like CalibrationScreen pattern
+  useEffect(() => {
+    // Check if face is detected (same logic as CalibrationScreen)
+    const hasFace = trackingData.leftIris !== null && trackingData.rightIris !== null;
+    setIsFaceDetected(hasFace);
+    trackingDataRef.current = trackingData; // Keep ref updated for use in callbacks
     
-    if (faceDetected) {
-      trackingFramesReceived.current += 1;
-    }
+    // Only process tracking when face is detected
+    if (!hasFace) return;
+    
+    // Increment tracking frames counter
+    trackingFramesReceived.current += 1;
     
     // Update tracking quality
-    setTrackingQualityData(data.trackingQuality);
+    setTrackingQualityData(trackingData.trackingQuality);
     
     // Track blinks
-    if (data.isBlinking) {
+    if (trackingData.isBlinking) {
       setLocalBlinkCount(prev => prev + 1);
     }
 
     // Track look aways
-    if (data.isLookingAway) {
+    if (trackingData.isLookingAway) {
       setLocalLookAways(prev => prev + 1);
     }
 
     // Calculate gaze stability based on movement
-    if (data.gazeDirection && previousGazePosition.current) {
+    if (trackingData.gazeDirection && previousGazePosition.current) {
       const movement = Math.hypot(
-        data.gazeDirection.x - previousGazePosition.current.x,
-        data.gazeDirection.y - previousGazePosition.current.y
+        trackingData.gazeDirection.x - previousGazePosition.current.x,
+        trackingData.gazeDirection.y - previousGazePosition.current.y
       );
       
       gazeStabilityHistory.current.push(movement);
@@ -86,27 +95,32 @@ export const QuestionScreen = () => {
       setGazeStability(Math.round(stabilityScore));
     }
     
-    if (data.gazeDirection) {
-      previousGazePosition.current = data.gazeDirection;
+    if (trackingData.gazeDirection) {
+      previousGazePosition.current = trackingData.gazeDirection;
     }
-  }, []);
-
-  // Initialize MediaPipe FaceMesh
-  useMediaPipeFaceMesh({
-    videoElement: videoRef.current,
-    enabled: showingQuestion,
-    onResults: handleEyeTrackingData,
-  });
+  }, [trackingData]); // Re-run when trackingData changes
 
   const handleAnswer = useCallback((answer: string) => {
     const responseTime = Date.now() - questionStartTime.current;
     
-    // VALIDATION: Check if we received sufficient tracking data
+    // VALIDATION 1: Check if face is currently detected
+    if (!isFaceDetected) {
+      toast({
+        title: "👀 Look at the Camera",
+        description: "Please ensure your face is visible in the camera before answering. We need to track your eye movements.",
+        variant: "destructive",
+        duration: 5000,
+      });
+      return; // Don't process the answer
+    }
+    
+    // VALIDATION 2: Check if we received sufficient tracking data during the question
     // Minimum 10 frames required (about 0.3 seconds at 30fps)
     const MIN_TRACKING_FRAMES = 10;
     const hasValidTracking = trackingFramesReceived.current >= MIN_TRACKING_FRAMES;
     
     console.log('📊 Tracking Validation:', {
+      faceCurrentlyDetected: isFaceDetected,
       framesReceived: trackingFramesReceived.current,
       minimumRequired: MIN_TRACKING_FRAMES,
       hasValidTracking,
@@ -232,6 +246,7 @@ export const QuestionScreen = () => {
     trackingQualityData,
     updateQuestionData,
     toast,
+    isFaceDetected,
   ]);
 
   // Handle feedback completion
